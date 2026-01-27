@@ -278,9 +278,30 @@ services:
       - ${UI_PORT:-8080}:8080
     networks:
       - default
+  caddy:
+    container_name: datalens-caddy
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+    depends_on:
+      - ui
+
+    networks:
+      - default
 #
 volumes:
   db-postgres:
+  caddy_data:
+  caddy_config:
 #
 networks:
   default:
