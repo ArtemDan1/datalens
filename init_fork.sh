@@ -14,14 +14,14 @@ gen_https() {
   local domain="$1"
   local email="$2"
 
-  cat > "${CADDYFILE_PATH}" <<EOF
+  cat > "$CADDYFILE_PATH" <<EOF
 # HTTP → HTTPS redirect
 :80 {
 	redir https://{host}{uri} permanent
 }
 
 # HTTPS
-${domain} {
+$domain {
 	encode zstd gzip
 
 	log {
@@ -29,15 +29,15 @@ ${domain} {
 		format console
 	}
 
-	tls ${email}
+	tls $email
 
-	reverse_proxy ${UPSTREAM}
+	reverse_proxy $UPSTREAM
 }
 EOF
 }
 
 gen_http() {
-  cat > "${CADDYFILE_PATH}" <<EOF
+  cat > "$CADDYFILE_PATH" <<EOF
 :80 {
 	encode zstd gzip
 
@@ -46,14 +46,35 @@ gen_http() {
 		format console
 	}
 
-	reverse_proxy ${UPSTREAM}
+	reverse_proxy $UPSTREAM
 }
 EOF
 }
 
-case "${MODE}" in
+case "$MODE" in
   1)
     read -r -p "DOMAIN (например, dl.example.com): " DOMAIN
     read -r -p "EMAIL  (для Let's Encrypt): " EMAIL
 
-    if [[ -z "]()]()
+    if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
+      echo "DOMAIN и EMAIL обязательны для HTTPS."
+      exit 1
+    fi
+
+    gen_https "$DOMAIN" "$EMAIL"
+    echo "Ок: HTTPS + редирект 80→443 сгенерен для $DOMAIN"
+    ;;
+  2)
+    gen_http
+    echo "Ок: HTTP режим (:80)"
+    ;;
+  *)
+    echo "Нужно выбрать 1 или 2."
+    exit 1
+    ;;
+esac
+
+echo "Перезапускаю сервисы..."
+HC=1 docker compose -f "$COMPOSE_FILE" down
+HC=1 docker compose -f "$COMPOSE_FILE" up -d --build
+echo "Готово."
