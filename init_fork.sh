@@ -31,7 +31,12 @@ $domain {
 
 	tls $email
 
-	reverse_proxy $UPSTREAM
+	reverse_proxy $UPSTREAM {
+        header_up Host {host}
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-For {remote_host}
+    }
 }
 EOF
 }
