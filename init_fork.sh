@@ -31,7 +31,13 @@ https://$domain {
     format console
   }
 
-  reverse_proxy $UPSTREAM
+  reverse_proxy datalens-ui:8080 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
 }
 EOF
 }
@@ -46,7 +52,13 @@ http://:80 {
     format console
   }
 
-  reverse_proxy $UPSTREAM
+  reverse_proxy datalens-ui:8080 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Host {host}
+    header_up X-Forwarded-Proto {scheme}
+  }
 }
 EOF
 }
