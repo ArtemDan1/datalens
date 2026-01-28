@@ -21,6 +21,8 @@ gen_https() {
 }
 
 $domain {
+  header Referrer-Policy "no-referrer"
+  
   encode zstd gzip
 
   log {
@@ -31,8 +33,6 @@ $domain {
   # Важно: НЕ ломаем Host. Иначе UI/прокси внутри DataLens начнёт редиректить/403/ORB.
   reverse_proxy $UPSTREAM {
     header_up Host {host}
-    header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-For {remote_host}
     header_up X-Forwarded-Proto {scheme}
     header_up X-Forwarded-Host {host}
   }
@@ -52,8 +52,6 @@ gen_http() {
 
   reverse_proxy $UPSTREAM {
     header_up Host {host}
-    header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-For {remote_host}
     header_up X-Forwarded-Proto {scheme}
     header_up X-Forwarded-Host {host}
   }
