@@ -16,9 +16,14 @@ gen_https() {
   cat > "$CADDYFILE_PATH" <<EOF
 {
   email $email
+  auto_https off
 }
 
-$domain {
+http://$domain {
+  redir https://{host}{uri} permanent
+}
+
+https://$domain {
   encode zstd gzip
   
   log {
@@ -26,22 +31,14 @@ $domain {
     format console
   }
 
-  # Заголовки безопасности и CORS
-  header {
-    # Разрешаем загрузку ресурсов
-    -Server
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "SAMEORIGIN"
-    Referrer-Policy "strict-origin-when-cross-origin"
-  }
-
-  # Проксируем всё на datalens-ui
+  # Передаём запрос как есть, не меняя Host
   reverse_proxy $UPSTREAM {
-    header_up Host {host}
-    header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
     header_up X-Forwarded-Proto {scheme}
-    header_up X-Forwarded-Host {host}
+    
+    # Важно: сохраняем оригинальный Host
+    # header_up Host {upstream_hostport}
   }
 }
 EOF
@@ -57,21 +54,10 @@ gen_http() {
     format console
   }
 
-  # Заголовки безопасности
-  header {
-    -Server
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "SAMEORIGIN"
-    Referrer-Policy "strict-origin-when-cross-origin"
-  }
-
-  # Проксируем всё на datalens-ui
   reverse_proxy $UPSTREAM {
-    header_up Host {host}
-    header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
     header_up X-Forwarded-Proto {scheme}
-    header_up X-Forwarded-Host {host}
   }
 }
 EOF
@@ -79,18 +65,22 @@ EOF
 
 case "$MODE" in
   1)
-    read -r -p "DOMAIN (например, dl.example.com): " DOMAIN
+    read -r -p "DOMAIN (например, dl.netvisor.site): " DOMAIN
     read -r -p "EMAIL  (для Let's Encrypt): " EMAIL
     if [[ -z "${DOMAIN// }" || -z "${EMAIL// }" ]]; then
       echo "DOMAIN и EMAIL обязательны для HTTPS."
       exit 1
     fi
     gen_https "$DOMAIN" "$EMAIL"
-    echo "Ок: HTTPS сгенерен для $DOMAIN (редирект 80→443 автоматический)"
+    
+    # Обновляем UI_APP_ENDPOINT в docker-compose
+    export UI_APP_ENDPOINT="https://$DOMAIN"
+    
+    echo "✓ HTTPS сгенерен для $DOMAIN"
     ;;
   2)
     gen_http
-    echo "Ок: HTTP режим (только :80, без TLS)"
+    echo "✓ HTTP режим (только :80, без TLS)"
     ;;
   *)
     echo "Нужно выбрать 1 или 2."
@@ -98,11 +88,17 @@ case "$MODE" in
     ;;
 esac
 
+echo ""
 echo "Перезапускаю сервисы..."
 HC=1 docker compose -f "$COMPOSE_FILE" down
 HC=1 docker compose -f "$COMPOSE_FILE" up -d --build
 
-echo "Готово."
 echo ""
-echo "Проверь логи Caddy: docker compose -f $COMPOSE_FILE logs -f caddy"
-echo "Проверь логи UI:    docker compose -f $COMPOSE_FILE logs -f datalens-ui"
+echo "✓ Готово!"
+echo ""
+echo "Проверь логи:"
+echo "  docker compose -f $COMPOSE_FILE logs -f caddy"
+echo "  docker compose -f $COMPOSE_FILE logs -f ui"
+echo ""
+echo "Если проблемы с 403, проверь:"
+echo "  docker compose -f $COMPOSE_FILE exec ui env | grep -i host"
