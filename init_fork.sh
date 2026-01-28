@@ -13,30 +13,35 @@ read -r -p "Ввод (1/2): " MODE
 gen_https() {
   local domain="$1"
   local email="$2"
-
   cat > "$CADDYFILE_PATH" <<EOF
 {
   email $email
 }
 
-http://$domain {
-  redir https://$domain{uri} permanent
-}
-
-https://$domain {
+$domain {
   encode zstd gzip
-
+  
   log {
     output stdout
     format console
   }
 
-  reverse_proxy datalens-ui:8080 {
+  # Заголовки безопасности и CORS
+  header {
+    # Разрешаем загрузку ресурсов
+    -Server
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # Проксируем всё на datalens-ui
+  reverse_proxy $UPSTREAM {
     header_up Host {host}
-    header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-For {remote_host}
-    header_up X-Forwarded-Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
     header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
   }
 }
 EOF
@@ -44,20 +49,29 @@ EOF
 
 gen_http() {
   cat > "$CADDYFILE_PATH" <<EOF
-http://:80 {
+:80 {
   encode zstd gzip
-
+  
   log {
     output stdout
     format console
   }
 
-  reverse_proxy datalens-ui:8080 {
+  # Заголовки безопасности
+  header {
+    -Server
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # Проксируем всё на datalens-ui
+  reverse_proxy $UPSTREAM {
     header_up Host {host}
-    header_up X-Real-IP {remote_host}
-    header_up X-Forwarded-For {remote_host}
-    header_up X-Forwarded-Host {host}
+    header_up X-Real-IP {remote}
+    header_up X-Forwarded-For {remote}
     header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
   }
 }
 EOF
@@ -67,14 +81,12 @@ case "$MODE" in
   1)
     read -r -p "DOMAIN (например, dl.example.com): " DOMAIN
     read -r -p "EMAIL  (для Let's Encrypt): " EMAIL
-
     if [[ -z "${DOMAIN// }" || -z "${EMAIL// }" ]]; then
       echo "DOMAIN и EMAIL обязательны для HTTPS."
       exit 1
     fi
-
     gen_https "$DOMAIN" "$EMAIL"
-    echo "Ок: HTTPS + редирект 80→443 сгенерен для $DOMAIN"
+    echo "Ок: HTTPS сгенерен для $DOMAIN (редирект 80→443 автоматический)"
     ;;
   2)
     gen_http
@@ -89,4 +101,8 @@ esac
 echo "Перезапускаю сервисы..."
 HC=1 docker compose -f "$COMPOSE_FILE" down
 HC=1 docker compose -f "$COMPOSE_FILE" up -d --build
+
 echo "Готово."
+echo ""
+echo "Проверь логи Caddy: docker compose -f $COMPOSE_FILE logs -f caddy"
+echo "Проверь логи UI:    docker compose -f $COMPOSE_FILE logs -f datalens-ui"
