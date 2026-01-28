@@ -16,14 +16,9 @@ gen_https() {
   cat > "$CADDYFILE_PATH" <<EOF
 {
   email $email
-  auto_https off
 }
 
-http://$domain {
-  redir https://{host}{uri} permanent
-}
-
-https://$domain {
+$domain {
   encode zstd gzip
   
   log {
@@ -31,14 +26,13 @@ https://$domain {
     format console
   }
 
-  # Передаём запрос как есть, не меняя Host
   reverse_proxy $UPSTREAM {
+    # Подменяем Host на внутренний
+    header_up Host {upstream_hostport}
     header_up X-Real-IP {remote_host}
     header_up X-Forwarded-For {remote_host}
     header_up X-Forwarded-Proto {scheme}
-    
-    # Важно: сохраняем оригинальный Host
-    # header_up Host {upstream_hostport}
+    header_up X-Forwarded-Host $domain
   }
 }
 EOF
