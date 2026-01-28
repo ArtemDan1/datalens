@@ -15,48 +15,38 @@ gen_https() {
   local email="$2"
 
   cat > "$CADDYFILE_PATH" <<EOF
-# HTTP → HTTPS redirect
-:80 {
-	redir https://{host}{uri} permanent
+{
+  email $email
 }
 
-# HTTPS
-$domain {
-	encode zstd gzip
+http://$domain {
+  redir https://$domain{uri} permanent
+}
 
-	log {
-		output stdout
-		format console
-	}
+https://$domain {
+  encode zstd gzip
 
-	tls $email
+  log {
+    output stdout
+    format console
+  }
 
-	reverse_proxy $UPSTREAM {
-        header_up Host {host}
-        header_up X-Forwarded-Host {host}
-        header_up X-Forwarded-Proto https
-        header_up X-Forwarded-For {remote_host}
-    }
+  reverse_proxy $UPSTREAM
 }
 EOF
 }
 
 gen_http() {
   cat > "$CADDYFILE_PATH" <<EOF
-:80 {
-	encode zstd gzip
+http://:80 {
+  encode zstd gzip
 
-	log {
-		output stdout
-		format console
-	}
+  log {
+    output stdout
+    format console
+  }
 
-	reverse_proxy $UPSTREAM {
-        header_up Host {host}
-        header_up X-Forwarded-Host {host}
-        header_up X-Forwarded-Proto https
-        header_up X-Forwarded-For {remote_host}
-    }
+  reverse_proxy $UPSTREAM
 }
 EOF
 }
@@ -66,7 +56,7 @@ case "$MODE" in
     read -r -p "DOMAIN (например, dl.example.com): " DOMAIN
     read -r -p "EMAIL  (для Let's Encrypt): " EMAIL
 
-    if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
+    if [[ -z "${DOMAIN// }" || -z "${EMAIL// }" ]]; then
       echo "DOMAIN и EMAIL обязательны для HTTPS."
       exit 1
     fi
@@ -76,7 +66,7 @@ case "$MODE" in
     ;;
   2)
     gen_http
-    echo "Ок: HTTP режим (:80)"
+    echo "Ок: HTTP режим (только :80, без TLS)"
     ;;
   *)
     echo "Нужно выбрать 1 или 2."
